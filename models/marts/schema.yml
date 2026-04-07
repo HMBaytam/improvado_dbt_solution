@@ -1,0 +1,36 @@
+version: 2
+models:
+  - name: unified_model
+    description: "This model unifies data from Facebook Ads, Google Ads, and TikTok Ads into a single table for analysis."
+    columns:
+      - name: date
+        description: "The date of the ad performance data."
+        tests: 
+          - not_null
+      - name: source
+        description: "The source of the ad data (e.g., 'facebook', 'google', 'tiktok')."
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['facebook', 'google', 'tiktok']
+      - name: campaign_id
+        description: "The unique identifier for the ad campaign."
+        tests: 
+          - not_null
+      - name: cost
+        description: "The total cost of the ads."
+        tests: 
+          - not_null
+      - name: ctr
+        description: "clicks / impressions — available all platforms"
+      - name: cpc
+        description: "cost / clicks — available all platforms"
+      - name: cpa
+        description: "cost / conversions — available all platforms"
+      - name: cpm
+        description: "cost per 1000 impressions — available all platforms"
+      - name: roas
+        description: "conversion_value / cost — Google only, null elsewhere"
+      - name: engagement_actions
+        description: "likes + shares + comments — TikTok only, null elsewhere"

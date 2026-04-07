@@ -1,0 +1,9 @@
+
+version: 2
+sources:
+  - name: raw
+    schema: improvado_data
+    tables:
+      - name: facebook_ads
+      - name: google_ads
+      - name: tiktok_ads
