@@ -1,3 +1,9 @@
+# Looker Studio Dashboard Definitions
+
+[Dashboard](https://lookerstudio.google.com/u/1/reporting/61577802-bc4f-4903-b8fd-62ae6bd937ba/page/p_n33chz9i2d)
+
+
+
 # Paid Ads dbt Data Layer — Dashboard Context
 
 This document describes the full dbt data layer built for a cross-platform paid ads reporting dashboard. Use it as context when building the dashboard. All tables are materialized as physical tables in the warehouse.
