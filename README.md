@@ -2,7 +2,6 @@
 
 [Dashboard](https://lookerstudio.google.com/u/1/reporting/61577802-bc4f-4903-b8fd-62ae6bd937ba/page/p_n33chz9i2d)
 
-# KPI Definitions & Formulas
 ## Paid Ads Performance Dashboard — Google · Facebook · TikTok
 
 > All formulas are Looker Studio calculated fields referencing `rpt_ads_daily` unless the Source Table column states otherwise.
