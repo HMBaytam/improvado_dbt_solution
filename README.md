@@ -2,7 +2,136 @@
 
 [Dashboard](https://lookerstudio.google.com/u/1/reporting/61577802-bc4f-4903-b8fd-62ae6bd937ba/page/p_n33chz9i2d)
 
+# KPI Definitions & Formulas
+## Paid Ads Performance Dashboard — Google · Facebook · TikTok
 
+> All formulas are Looker Studio calculated fields referencing `rpt_ads_daily` unless the Source Table column states otherwise.
+> Fields marked **custom** must be created manually: Resource → Manage data sources → Add a field.
+> **Platform** column: `ALL` = all three sources · `G` = Google only · `FB` = Facebook only · `TT` = TikTok only.
+> **Good direction**: ↑ = higher is better · ↓ = lower is better · `~` = context-dependent.
+
+---
+
+## 1. Core Performance KPIs
+
+| KPI | Definition | Looker Studio Formula | Source Table | Format | Platform | Good Direction | Notes |
+|---|---|---|---|---|---|---|---|
+| Total Spend | Total ad spend across all platforms in the selected period | `SUM(cost)` | `rpt_ads_daily` or `rpt_ads_platform_summary` | Currency, 0 dp | ALL | ~ | Never use `AVG(cost)` — cost is a daily per-row value, not a rate |
+| Total Conversions | Total completed goal actions (purchase, lead, sign-up) across all platforms | `SUM(conversions)` | `rpt_ads_daily` or `rpt_ads_platform_summary` | Number | ALL | ↑ | Not deduplicated cross-platform — a user converting on both Google and Facebook is counted twice |
+| Avg. CPA | Average cost to acquire one conversion | `SUM(cost) / SUM(conversions)` | `rpt_ads_daily` or `rpt_ads_platform_summary` | Currency, 2 dp | ALL | ↓ | ⚠ Never use `AVG(cpa)` — row-level averaging over-weights low-volume days and produces an incorrect blended rate |
+| ROAS | Revenue generated per dollar of ad spend — Google only in this schema | `SUM(conversion_value) / SUM(cost)` | `rpt_ads_daily` or `rpt_ads_platform_summary` | Number + "x", 2 dp | G | ↑ | ⚠ Label as "Google ROAS". Facebook/TikTok have NULL conversion_value. Apply `source = google` filter or use `SUM(IFNULL(conversion_value, 0)) / SUM(cost)` for blended future use |
+| Total Impressions | Total times ads were displayed to users | `SUM(impressions)` | `rpt_ads_daily` or `rpt_ads_platform_summary` | Number, abbreviated (40.5M) | ALL | ↑ | — |
+
+---
+
+## 2. WoW (Week-over-Week) Comparison Metrics
+
+> All five use Looker Studio's native **Comparison date range: Previous period** — no custom delta formula required.
+> ⚠ Do not use the pre-built `cost_wow_prior` / `cpa_wow_prior` columns as scorecard target metrics. Looker Studio SUMs them across all visible rows rather than isolating the correct 7-day window.
+
+| KPI | Primary Metric Formula | Source Table | Good Direction | Scorecard Setting |
+|---|---|---|---|---|
+| Spend WoW | `SUM(cost)` | `rpt_ads_platform_summary` | ~ | Comparison date range: Previous period |
+| Conversions WoW | `SUM(conversions)` | `rpt_ads_platform_summary` | ↑ | Comparison date range: Previous period |
+| CPA WoW | `SUM(cost) / SUM(conversions)` | `rpt_ads_platform_summary` | ↓ | Comparison date range: Previous period + enable **Comparison direction: reversed** so negative delta = green |
+| ROAS WoW | `SUM(conversion_value) / SUM(cost)` | `rpt_ads_platform_summary` | ↑ | Comparison date range: Previous period + apply `source = google` filter |
+| Impressions WoW | `SUM(impressions)` | `rpt_ads_platform_summary` | ↑ | Comparison date range: Previous period |
+
+---
+
+## 3. Efficiency Metrics
+
+| KPI | Definition | Looker Studio Formula | Source Table | Format | Platform | Good Direction | Notes |
+|---|---|---|---|---|---|---|---|
+| CTR | % of impressions that resulted in a click | `SUM(clicks) / SUM(impressions)` | `rpt_ads_daily` | Percent, 2 dp | ALL | ↑ | ⚠ Never use `AVG(ctr)` — same row-level averaging problem as CPA. Jan 2024: Google 1.90%, Facebook 1.96%, TikTok 1.61% |
+| CPC | Average cost paid per click | `SUM(cost) / SUM(clicks)` | `rpt_ads_daily` | Currency, 2 dp | ALL | ↓ | — |
+| CPM | Cost to serve 1,000 impressions | `(SUM(cost) / SUM(impressions)) * 1000` | `rpt_ads_daily` | Currency, 2 dp | ALL | ↓ | — |
+| Conversion Rate | % of clicks that resulted in a conversion | `SUM(conversions) / SUM(clicks)` | `rpt_ads_daily` | Percent, 2 dp | ALL | ↑ | — |
+| CPA by Platform | CPA per platform — use `source` as breakdown dimension in bar chart | `SUM(cost) / SUM(conversions)` | `rpt_ads_platform_summary` | Currency, 2 dp | ALL | ↓ | Jan 2024: Facebook $7.64 · Google $8.93 · TikTok $11.00 |
+
+---
+
+## 4. Google-Specific Metrics
+
+> Apply chart filter `source Equal to google`. These columns are NULL for Facebook and TikTok rows.
+
+| KPI | Definition | Looker Studio Formula | Source Table | Format | Good Direction | Notes |
+|---|---|---|---|---|---|---|
+| Quality Score | Google's 1–10 rating of keyword, ad, and landing page relevance. Higher scores reduce CPC and improve ad position | `AVG(quality_score)` | `rpt_ads_daily` | Number, 1 dp | ↑ | Jan 2024: Brand Search 9.0 · Shopping 8.0 · Display 7.0 · Generic Search 6.8 |
+| Quality Score Band | Groups QS into colour-coded tiers for conditional formatting | `CASE WHEN AVG(quality_score) >= 8 THEN 'Good (8–10)' WHEN AVG(quality_score) >= 6 THEN 'Average (6–7)' ELSE 'Poor (<6)' END` | `rpt_ads_daily` | Text (dimension) | ↑ | Bind Good → green, Average → amber, Poor → red in chart style panel |
+| Search Impression Share | % of eligible auctions where the ad actually appeared. The remainder was lost to budget or low Ad Rank | `AVG(search_impression_share)` | `rpt_ads_daily` | Percent, 1 dp | ↑ | Raw column is decimal (0.91 = 91%) — Looker Studio percent format handles ×100. Jan 2024: Brand 91.4% · Shopping 66.9% · Generic 44.4% · Display 34.6% |
+| Search Impression Share Gap | % of eligible impressions being missed | `1 - AVG(search_impression_share)` | `rpt_ads_daily` | Percent, 1 dp | ↓ | Complement of SIS. Jan 2024: Generic Search missing 55.6% of eligible impressions |
+| Google ROAS | Revenue per dollar spent — Google campaigns only | `SUM(conversion_value) / SUM(cost)` | `rpt_ads_daily` | Number + "x", 2 dp | ↑ | Scoped via `source = google` filter. Jan 2024: Brand Search 9.8x · Shopping 7.9x · Display 5.1x · Generic Search 2.0x |
+
+---
+
+## 5. Facebook-Specific Metrics
+
+> Apply chart filter `source Equal to facebook`. Reach and Frequency columns are NULL for Google and TikTok rows.
+
+| KPI | Definition | Looker Studio Formula | Source Table | Format | Good Direction | Notes |
+|---|---|---|---|---|---|---|
+| Reach | Number of unique users who saw the ad at least once | `SUM(reach)` | `rpt_ads_daily` | Number | ↑ | Facebook rows only |
+| Frequency | Average number of times a unique user saw the ad (Impressions / Reach) | `AVG(frequency)` | `rpt_ads_daily` | Number, 2 dp | ↓ | ⚠ Use `AVG(frequency)` not `SUM(frequency)/SUM(reach)` — column is pre-computed. Alert threshold: >3.0 = audience fatigue. Jan 2024 range: 1.18–1.34 (healthy) |
+
+---
+
+## 6. TikTok-Specific Metrics
+
+> Apply chart filter `source Equal to tiktok`. All watch_rate_* columns are NULL for Google and Facebook rows.
+> Raw watch rate columns store decimals (0.74 = 74%) — Looker Studio percent format handles the ×100 conversion automatically.
+
+| KPI | Definition | Looker Studio Formula | Source Table | Format | Good Direction | Notes |
+|---|---|---|---|---|---|---|
+| Video Views | Times the video ad was viewed (counted after 2 seconds of play) | `SUM(video_views)` | `rpt_ads_daily` | Number | ↑ | Also populated for Facebook rows |
+| Video View Rate | % of impressions that resulted in a video view | `AVG(video_view_rate)` | `rpt_ads_daily` | Percent, 2 dp | ↑ | Also populated for Facebook rows |
+| Watch Rate — 25% | % of video views where the viewer watched at least 25% | `AVG(watch_rate_25)` | `rpt_ads_daily` | Percent, 1 dp | ↑ | TikTok only. Jan 2024 avg: 77.3% |
+| Watch Rate — 50% | % of video views where the viewer watched at least 50% | `AVG(watch_rate_50)` | `rpt_ads_daily` | Percent, 1 dp | ↑ | TikTok only. Jan 2024 avg: 55.7% |
+| Watch Rate — 75% | % of video views where the viewer watched at least 75% | `AVG(watch_rate_75)` | `rpt_ads_daily` | Percent, 1 dp | ↑ | TikTok only. Jan 2024 avg: 38.7% |
+| Watch Rate — 100% (Completion) | % of video views where the viewer watched the entire video — primary creative quality signal | `AVG(watch_rate_100)` | `rpt_ads_daily` | Percent, 1 dp | ↑ | TikTok only. Jan 2024: Influencer Collab 30.4% · Conversion Focus 25.3% · Traffic 23.5% · Awareness GenZ 22.2% |
+| Completion Band | Groups completion rate into performance tiers for conditional formatting | `CASE WHEN AVG(watch_rate_100) >= 0.28 THEN 'Strong (>28%)' WHEN AVG(watch_rate_100) >= 0.23 THEN 'Average (23–28%)' ELSE 'Weak (<23%)' END` | `rpt_ads_daily` | Text (dimension) | — | Thresholds based on Jan 2024 data range. Adjust as benchmarks evolve |
+| Drop-off: Hook (25→50%) | % of viewers who left between the 25% and 50% mark. High = hook not holding attention | `(AVG(watch_rate_25) - AVG(watch_rate_50)) / AVG(watch_rate_25)` | `rpt_ads_daily` | Percent, 1 dp | ↓ | Jan 2024: Awareness GenZ worst at 37.2% vs Influencer Collab 19.9% |
+| Drop-off: Mid (50→75%) | % of viewers who left between the 50% and 75% mark. High = mid-video pacing problem | `(AVG(watch_rate_50) - AVG(watch_rate_75)) / AVG(watch_rate_50)` | `rpt_ads_daily` | Percent, 1 dp | ↓ | Jan 2024 range: 24.7%–35.7% |
+| Drop-off: Close (75→100%) | % of viewers who left between 75% and the end. High = CTA or ending not landing | `(AVG(watch_rate_75) - AVG(watch_rate_100)) / AVG(watch_rate_75)` | `rpt_ads_daily` | Percent, 1 dp | ↓ | Jan 2024 range: 32.7%–39.3% |
+
+---
+
+## 7. Pre-built WoW & Rolling Average Columns
+
+> Native columns in `rpt_ads_platform_summary` — no custom formula required.
+> ⚠ Do not use as scorecard target metrics with "Metric" comparison type. Use **Previous period** comparison instead.
+
+| Column | Definition | Type |
+|---|---|---|
+| `cost_wow_prior` | Total spend in the equivalent prior 7-day window | Pre-built |
+| `conversions_wow_prior` | Total conversions in the equivalent prior 7-day window | Pre-built |
+| `cpa_wow_prior` | CPA in the equivalent prior 7-day window | Pre-built |
+| `cost_mom_prior` | Total spend in the equivalent prior 30-day window | Pre-built |
+| `cpa_mom_prior` | CPA in the equivalent prior 30-day window | Pre-built |
+| `cost_wow_pct_change` | (current cost − prior cost) / prior cost | Pre-built |
+| `conversions_wow_pct_change` | (current conv − prior conv) / prior conv | Pre-built |
+| `cpa_wow_pct_change` | (current CPA − prior CPA) / prior CPA | Pre-built |
+| `cost_mom_pct_change` | (current cost − prior cost) / prior cost, 30-day basis | Pre-built |
+| `cpa_mom_pct_change` | (current CPA − prior CPA) / prior CPA, 30-day basis | Pre-built |
+| `cost_7d_avg` | 7-day rolling average of daily spend | Pre-built |
+| `cpa_7d_avg` | 7-day rolling average of daily CPA | Pre-built |
+| `ctr_7d_avg` | 7-day rolling average of daily CTR | Pre-built |
+| `roas_7d_avg` | 7-day rolling average of daily ROAS (Google only) | Pre-built |
+
+---
+
+## 8. Custom Dimension Fields
+
+| Field Name | Used In | Formula | Notes |
+|---|---|---|---|
+| `campaign_type` | Google QS & Search Imp. Share widget | `CASE WHEN campaign_name = 'Search_Brand_Terms' THEN 'Brand Search' WHEN campaign_name = 'Search_Generic_Terms' THEN 'Generic Search' WHEN campaign_name = 'Shopping_All_Products' THEN 'Shopping' WHEN campaign_name = 'Display_Remarketing' THEN 'Display / Remarketing' ELSE campaign_name END` | ELSE fallback catches new campaigns without breaking the chart |
+| `tiktok_campaign_type` | TikTok Video Watch Depth widget | `CASE WHEN campaign_name = 'Influencer_Collab' THEN 'Influencer Collab' WHEN campaign_name = 'Conversion_Focus' THEN 'Conversion Focus' WHEN campaign_name = 'Traffic_Campaign' THEN 'Traffic' WHEN campaign_name = 'Awareness_GenZ' THEN 'Awareness — Gen Z' ELSE campaign_name END` | ELSE fallback catches new campaigns without breaking the chart |
+| `quality_score_band` | Google QS conditional formatting | `CASE WHEN AVG(quality_score) >= 8 THEN 'Good (8–10)' WHEN AVG(quality_score) >= 6 THEN 'Average (6–7)' ELSE 'Poor (<6)' END` | Bind: Good → green, Average → amber, Poor → red |
+| `completion_band` | TikTok Watch Depth conditional formatting | `CASE WHEN AVG(watch_rate_100) >= 0.28 THEN 'Strong (>28%)' WHEN AVG(watch_rate_100) >= 0.23 THEN 'Average (23–28%)' ELSE 'Weak (<23%)' END` | Thresholds based on Jan 2024 actuals — adjust monthly |
+
+---
+
+*Source tables: `rpt_ads_daily` · `rpt_ads_platform_summary` · `rpt_ads_campaign_summary` · `unified_model` — Jan 2024 data.*
 
 # Paid Ads dbt Data Layer — Dashboard Context
 
